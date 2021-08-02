@@ -215,7 +215,6 @@ class Factor(DataReader, DataListener):
                  entity_ids: List[str] = None,
                  exchanges: List[str] = None,
                  codes: List[str] = None,
-                 the_timestamp: Union[str, pd.Timestamp] = None,
                  start_timestamp: Union[str, pd.Timestamp] = None,
                  end_timestamp: Union[str, pd.Timestamp] = None,
                  columns: List = None,
@@ -226,33 +225,32 @@ class Factor(DataReader, DataListener):
                  category_field: str = 'entity_id',
                  time_field: str = 'timestamp',
                  computing_window: int = None,
-                 # child added arguments
                  keep_all_timestamp: bool = False,
                  fill_method: str = 'ffill',
                  effective_number: int = None,
                  transformer: Transformer = None,
                  accumulator: Accumulator = None,
                  need_persist: bool = False,
-                 dry_run: bool = False,
+                 only_compute_factor: bool = False,
                  factor_name: str = None,
                  clear_state: bool = False,
-                 not_load_data: bool = False) -> None:
+                 only_load_factor: bool = False) -> None:
         """
-
-        :param computing_window: the window size for computing factor
-        :param keep_all_timestamp: whether fill all timestamp gap,default False
+        :param keep_all_timestamp:
         :param fill_method:
         :param effective_number:
         :param transformer:
         :param accumulator:
         :param need_persist: whether persist factor
-        :param dry_run: True for just computing factor, False for backtesting
+        :param only_compute_factor: only compute factor nor result
+        :param factor_name:
+        :param clear_state:
+        :param only_load_factor: only load factor and compute result
         """
-
-        self.not_load_data = not_load_data
+        self.only_load_factor = only_load_factor
 
         super().__init__(data_schema, entity_schema, provider, entity_provider, entity_ids, exchanges, codes,
-                         the_timestamp, start_timestamp, end_timestamp, columns, filters, order, limit, level,
+                         start_timestamp, end_timestamp, columns, filters, order, limit, level,
                          category_field, time_field, computing_window)
 
         # define unique name of your factor if you want to keep factor state
@@ -279,7 +277,7 @@ class Factor(DataReader, DataListener):
             self.accumulator = self.__class__.accumulator
 
         self.need_persist = need_persist
-        self.dry_run = dry_run
+        self.dry_run = only_compute_factor
 
         # 中间结果，不持久化
         # data_df->pipe_df
@@ -298,7 +296,7 @@ class Factor(DataReader, DataListener):
 
         if self.clear_state:
             self.clear_state_data()
-        elif self.need_persist:
+        elif self.need_persist or self.only_load_factor:
             self.load_factor()
 
             # 根据已经计算的factor_df和computing_window来保留data_df
@@ -325,11 +323,11 @@ class Factor(DataReader, DataListener):
 
         # the compute logic is not triggered from load data
         # for the case:1)load factor from db 2)compute the result
-        if self.not_load_data:
+        if self.only_load_factor:
             self.compute()
 
     def load_data(self):
-        if self.not_load_data:
+        if self.only_load_factor:
             return
         super().load_data()
 
@@ -392,7 +390,7 @@ class Factor(DataReader, DataListener):
         return None
 
     def pre_compute(self):
-        if not self.not_load_data and not pd_is_not_null(self.pipe_df):
+        if not self.only_load_factor and not pd_is_not_null(self.pipe_df):
             self.pipe_df = self.data_df
 
     def do_compute(self):
@@ -405,7 +403,7 @@ class Factor(DataReader, DataListener):
         self.logger.info('compute result finish')
 
     def compute_factor(self):
-        if self.not_load_data:
+        if self.only_load_factor:
             return
             # 无状态的转换运算
         if pd_is_not_null(self.data_df) and self.transformer:
@@ -423,7 +421,7 @@ class Factor(DataReader, DataListener):
         pass
 
     def after_compute(self):
-        if self.not_load_data:
+        if self.only_load_factor:
             return
         if self.keep_all_timestamp:
             self.fill_gap()
@@ -449,6 +447,8 @@ class Factor(DataReader, DataListener):
         self.logger.info(f'[[[ ^^^^^^^^factor:{self.factor_name} ^^^^^^^^]]]')
 
     def drawer_main_df(self) -> Optional[pd.DataFrame]:
+        if self.only_load_factor:
+            return self.factor_df
         return self.data_df
 
     def drawer_factor_df_list(self) -> Optional[List[pd.DataFrame]]:
