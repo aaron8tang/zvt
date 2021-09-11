@@ -5,8 +5,9 @@ import requests
 
 from zvt.contract.api import get_data_count, get_data
 from zvt.contract.recorder import TimestampsDataRecorder, TimeSeriesDataRecorder
+from zvt.domain import CompanyType
+from zvt.domain.meta.stock_meta import Stock, StockDetail
 from zvt.utils.time_utils import to_pd_timestamp
-from zvt.domain import CompanyType, Stock, StockDetail
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ class BaseEastmoneyRecorder(object):
 
 
 class EastmoneyTimestampsDataRecorder(BaseEastmoneyRecorder, TimestampsDataRecorder):
-    entity_provider = 'joinquant'
+    entity_provider = 'eastmoney'
     entity_schema = StockDetail
 
     provider = 'eastmoney'
@@ -163,7 +164,7 @@ class EastmoneyTimestampsDataRecorder(BaseEastmoneyRecorder, TimestampsDataRecor
 
 
 class EastmoneyPageabeDataRecorder(BaseEastmoneyRecorder, TimeSeriesDataRecorder):
-    entity_provider = 'joinquant'
+    entity_provider = 'eastmoney'
     entity_schema = StockDetail
 
     provider = 'eastmoney'
@@ -205,7 +206,7 @@ class EastmoneyPageabeDataRecorder(BaseEastmoneyRecorder, TimeSeriesDataRecorder
 
 
 class EastmoneyMoreDataRecorder(BaseEastmoneyRecorder, TimeSeriesDataRecorder):
-    entity_provider = 'joinquant'
+    entity_provider = 'eastmoney'
     entity_schema = StockDetail
 
     provider = 'eastmoney'
@@ -246,3 +247,5 @@ class EastmoneyMoreDataRecorder(BaseEastmoneyRecorder, TimeSeriesDataRecorder):
             'pageNum': 1,
             'pageSize': size
         }
+# the __all__ is generated
+__all__ = ['ApiWrapper', 'get_fc', 'get_company_type', 'company_type_flag', 'call_eastmoney_api', 'get_from_path_fields', 'EastmoneyApiWrapper', 'BaseEastmoneyRecorder', 'EastmoneyTimestampsDataRecorder', 'EastmoneyPageabeDataRecorder', 'EastmoneyMoreDataRecorder']
