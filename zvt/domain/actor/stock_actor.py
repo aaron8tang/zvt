@@ -9,6 +9,9 @@ StockActorBase = declarative_base()
 
 
 class StockTopTenFreeHolder(StockActorBase, TradableMeetActor):
+    """
+    市场参与者：股票的前十大流通股东
+    """
     __tablename__ = 'stock_top_ten_free_holder'
 
     report_period = Column(String(length=32))
@@ -23,6 +26,9 @@ class StockTopTenFreeHolder(StockActorBase, TradableMeetActor):
 
 
 class StockTopTenHolder(StockActorBase, TradableMeetActor):
+    """
+    市场参与者：股票的前十大股东
+    """
     __tablename__ = 'stock_top_ten_holder'
 
     report_period = Column(String(length=32))
@@ -37,6 +43,9 @@ class StockTopTenHolder(StockActorBase, TradableMeetActor):
 
 
 class StockInstitutionalInvestorHolder(StockActorBase, TradableMeetActor):
+    """
+    市场参与者：股票的机构投资者
+    """
     __tablename__ = 'stock_institutional_investor_holder'
 
     report_period = Column(String(length=32))

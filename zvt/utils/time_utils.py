@@ -48,6 +48,10 @@ def now_timestamp():
 
 
 def now_pd_timestamp() -> pd.Timestamp:
+    """
+    调用pandas的方法返回当前时间。
+    :return:pd.Timestamp类型表示的当前时间。
+    """
     return pd.Timestamp.now()
 
 
@@ -244,8 +248,4 @@ def count_interval(start_date, end_date):
 if __name__ == '__main__':
     print(date_and_time('2019-10-01', '10:00'))
 # the __all__ is generated
-__all__ = ['to_pd_timestamp', 'to_timestamp', 'now_timestamp', 'now_pd_timestamp', 'today', 'to_time_str',
-           'now_time_str', 'next_date', 'pre_month_start_date', 'month_start_date', 'month_end_date',
-           'month_start_end_ranges', 'is_same_date', 'is_same_time', 'get_year_quarter', 'day_offset_today',
-           'get_year_quarters', 'date_and_time', 'next_timestamp', 'evaluate_size_from_timestamp',
-           'is_finished_kdata_timestamp', 'is_in_same_interval', 'split_time_interval']
+__all__ = ['to_pd_timestamp', 'to_timestamp', 'now_timestamp', 'now_pd_timestamp', 'today', 'current_date', 'to_time_str', 'now_time_str', 'next_date', 'pre_month', 'pre_month_start_date', 'pre_month_end_date', 'month_start_date', 'month_end_date', 'month_start_end_ranges', 'is_same_date', 'is_same_time', 'get_year_quarter', 'day_offset_today', 'get_year_quarters', 'date_and_time', 'next_timestamp', 'evaluate_size_from_timestamp', 'is_finished_kdata_timestamp', 'is_in_same_interval', 'split_time_interval', 'count_interval']

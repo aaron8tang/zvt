@@ -13,9 +13,9 @@ from sqlalchemy.orm import Query
 from sqlalchemy.orm import sessionmaker, Session
 
 from zvt import zvt_env
-from zvt.contract import IntervalLevel, TradableEntity
-from zvt.contract import Mixin
+from zvt.contract import IntervalLevel
 from zvt.contract import zvt_context
+from zvt.contract.schema import Mixin, TradableEntity
 from zvt.utils.pd_utils import pd_is_not_null, index_df
 from zvt.utils.time_utils import to_pd_timestamp
 
@@ -181,7 +181,7 @@ def table_name_to_domain_name(table_name: str) -> DeclarativeMeta:
     return domain_name
 
 
-def get_entity_schema(entity_type: str) -> object:
+def get_entity_schema(entity_type: str) -> Type[TradableEntity]:
     """
     get entity schema from name
 
@@ -207,7 +207,7 @@ def get_schema_by_name(name: str) -> DeclarativeMeta:
             return schema
 
 
-def get_schema_columns(schema: DeclarativeMeta) -> object:
+def get_schema_columns(schema: DeclarativeMeta) -> List[str]:
     """
     get all columns of the domain schema
 
@@ -227,6 +227,22 @@ def common_filter(query: Query,
                   order=None,
                   limit=None,
                   time_field='timestamp'):
+    """
+    生成一条查询用的SQL，类似：
+    SELECT stock.id AS stock_id, stock.timestamp AS stock_timestamp
+    FROM stock
+    WHERE stock.id IN ([POSTCOMPILE_id_1]) ORDER BY stock.timestamp ASC
+
+    :param query:
+    :param data_schema:
+    :param start_timestamp:
+    :param end_timestamp:
+    :param filters:
+    :param order:
+    :param limit:
+    :param time_field:
+    :return:
+    """
     assert data_schema is not None
     time_col = eval('data_schema.{}'.format(time_field))
 
@@ -273,7 +289,7 @@ def get_one(data_schema, id: str, provider: str = None, session: Session = None)
     return session.query(data_schema).get(id)
 
 
-def get_data(data_schema: Mixin,
+def get_data(data_schema: Type[Mixin],
              ids: List[str] = None,
              entity_ids: List[str] = None,
              entity_id: str = None,
@@ -307,8 +323,10 @@ def get_data(data_schema: Mixin,
         if type(columns[0]) == str:
             columns_ = []
             for col in columns:
-                assert isinstance(col, str)
-                columns_.append(eval('data_schema.{}'.format(col)))
+                if isinstance(col, str):
+                    columns_.append(eval('data_schema.{}'.format(col)))
+                else:
+                    columns_.append(col)
             columns = columns_
 
         # make sure get timestamp
@@ -492,7 +510,7 @@ def df_to_db(df: pd.DataFrame,
 
 
 def get_entities(
-        entity_schema: TradableEntity = None,
+        entity_schema: Type[TradableEntity] = None,
         entity_type: str = None,
         exchanges: List[str] = None,
         ids: List[str] = None,
@@ -510,7 +528,7 @@ def get_entities(
         session: Session = None,
         order=None,
         limit: int = None,
-        index: Union[str, list] = 'code') -> object:
+        index: Union[str, list] = 'code') -> List:
     if not entity_schema:
         entity_schema = zvt_context.tradable_schema_map[entity_type]
 
@@ -539,5 +557,11 @@ def get_entity_ids(entity_type='stock', entity_schema: TradableEntity = None, ex
     if pd_is_not_null(df):
         return df['entity_id'].to_list()
     return None
+
+
 # the __all__ is generated
-__all__ = ['get_db_name', 'get_db_engine', 'get_schemas', 'get_db_session', 'get_db_session_factory', 'domain_name_to_table_name', 'table_name_to_domain_name', 'get_entity_schema', 'get_schema_by_name', 'get_schema_columns', 'common_filter', 'del_data', 'get_one', 'get_data', 'data_exist', 'get_data_count', 'get_group', 'decode_entity_id', 'get_entity_type', 'get_entity_exchange', 'get_entity_code', 'df_to_db', 'get_entities', 'get_entity_ids']
+__all__ = ['get_db_name', 'get_db_engine', 'get_schemas', 'get_db_session', 'get_db_session_factory',
+           'domain_name_to_table_name', 'table_name_to_domain_name', 'get_entity_schema', 'get_schema_by_name',
+           'get_schema_columns', 'common_filter', 'del_data', 'get_one', 'get_data', 'data_exist', 'get_data_count',
+           'get_group', 'decode_entity_id', 'get_entity_type', 'get_entity_exchange', 'get_entity_code', 'df_to_db',
+           'get_entities', 'get_entity_ids']

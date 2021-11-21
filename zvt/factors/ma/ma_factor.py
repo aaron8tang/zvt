@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import argparse
-from typing import List, Union, Type, Optional
+from typing import List, Union, Type
 
 import pandas as pd
 
@@ -65,9 +65,6 @@ class MaFactor(TechnicalFactor):
                          computing_window, keep_all_timestamp, fill_method, effective_number, transformer, None,
                          need_persist, only_compute_factor, factor_name, clear_state, only_load_factor, adjust_type)
 
-    def drawer_factor_df_list(self) -> Optional[List[pd.DataFrame]]:
-        return [self.factor_df[self.transformer.indicators]]
-
 
 class CrossMaFactor(MaFactor):
     def compute_result(self):
@@ -80,7 +77,7 @@ class CrossMaFactor(MaFactor):
             current_col = col
 
         print(self.factor_df[s])
-        self.result_df = s.to_frame(name='score')
+        self.result_df = s.to_frame(name='filter_result')
 
 
 class VolumeUpMaFactor(TechnicalFactor):
@@ -114,6 +111,7 @@ class VolumeUpMaFactor(TechnicalFactor):
                  windows=None,
                  vol_windows=None,
                  turnover_threshold=300000000,
+                 up_intervals=40,
                  over_mode='and') -> None:
         if not windows:
             windows = [250]
@@ -123,6 +121,7 @@ class VolumeUpMaFactor(TechnicalFactor):
         self.windows = windows
         self.vol_windows = vol_windows
         self.turnover_threshold = turnover_threshold
+        self.up_intervals = up_intervals
         self.over_mode = over_mode
 
         columns: List = ['id', 'entity_id', 'timestamp', 'level', 'open', 'close', 'high', 'low', 'volume',
@@ -140,25 +139,36 @@ class VolumeUpMaFactor(TechnicalFactor):
 
         # 价格刚上均线
         cols = [f'ma{window}' for window in self.windows]
-        filter_se = (self.factor_df['close'] > self.factor_df[cols[0]]) & (
+        filter_up = (self.factor_df['close'] > self.factor_df[cols[0]]) & (
                 self.factor_df['close'] < 1.1 * self.factor_df[cols[0]])
         for col in cols[1:]:
             if self.over_mode == 'and':
-                filter_se = filter_se & (self.factor_df['close'] > self.factor_df[col])
+                filter_up = filter_up & ((self.factor_df['close'] > self.factor_df[col]) & (
+                        self.factor_df['close'] < 1.1 * self.factor_df[col]))
             else:
-                filter_se = filter_se | (self.factor_df['close'] > self.factor_df[col])
+                filter_up = filter_up | ((self.factor_df['close'] > self.factor_df[col]) & (
+                        self.factor_df['close'] < 1.1 * self.factor_df[col]))
         # 放量
         if self.vol_windows:
             vol_cols = [f'vol_ma{window}' for window in self.vol_windows]
-            filter_se = filter_se & (self.factor_df['volume'] > 2 * self.factor_df[vol_cols[0]])
+            filter_vol = (self.factor_df['volume'] > 2 * self.factor_df[vol_cols[0]])
             for col in vol_cols[1:]:
-                filter_se = filter_se & (self.factor_df['volume'] > 2 * self.factor_df[col])
+                filter_vol = filter_vol & (self.factor_df['volume'] > 2 * self.factor_df[col])
 
         # 成交额过滤
-        filter_se = filter_se & (self.factor_df['turnover'] > self.turnover_threshold)
+        s = filter_up & filter_vol & (self.factor_df['turnover'] > self.turnover_threshold)
 
-        print(self.factor_df[filter_se])
-        self.result_df = filter_se.to_frame(name='score')
+        # 突破后的时间周期 up_intervals
+        s[s == False] = None
+        s = s.groupby(level=0).fillna(method='ffill', limit=self.up_intervals)
+        s[s.isna()] = False
+
+        # 还在均线附近
+        # 1)刚突破
+        # 2)突破后，回调到附近
+        filter_result = filter_up & s & (self.factor_df['turnover'] > self.turnover_threshold)
+
+        self.result_df = filter_result.to_frame(name='filter_result')
 
 
 class CrossMaVolumeFactor(VolumeUpMaFactor):
@@ -174,7 +184,7 @@ class CrossMaVolumeFactor(VolumeUpMaFactor):
         filter_se = filter_se & (self.factor_df['turnover'] > self.turnover_threshold)
 
         print(self.factor_df[filter_se])
-        self.result_df = filter_se.to_frame(name='score')
+        self.result_df = filter_se.to_frame(name='filter_result')
 
 
 if __name__ == '__main__':

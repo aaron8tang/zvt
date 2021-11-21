@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-import json
 import logging
-from enum import Enum
 from typing import List
 from typing import Union, Optional, Type
 
@@ -15,231 +13,29 @@ from zvt.contract.data_type import Bean
 from zvt.contract.drawer import Rect
 from zvt.contract.factor import Accumulator
 from zvt.contract.factor import Transformer
-from zvt.contract.normal_data import NormalData
-from zvt.domain import Stock
-from zvt.factors.algorithm import intersect, combine
+from zvt.domain import Stock, Index, Index1dKdata
+from zvt.factors.shape import Fenxing, Direction, handle_first_fenxing, decode_rect, get_direction, handle_including, \
+    fenxing_power, handle_zhongshu, handle_duan, FactorStateEncoder
 from zvt.factors.technical_factor import TechnicalFactor
 from zvt.utils import pd_is_not_null, to_string
-from zvt.utils import to_time_str
-from zvt.utils.time_utils import TIME_FORMAT_ISO8601
 
 logger = logging.getLogger(__name__)
 
 
-class Direction(Enum):
-    up = 'up'
-    down = 'down'
-
-    def opposite(self):
-        if self == Direction.up:
-            return Direction.down
-        if self == Direction.down:
-            return Direction.up
-
-
-class Fenxing(Bean):
-    def __init__(self, state, kdata, index) -> None:
-        self.state = state
-        self.kdata = kdata
-        self.index = index
-
-
-class KState(Enum):
-    # 顶分型
-    bi_ding = 'bi_ding'
-    # 底分型
-    bi_di = 'bi_di'
-    # 临时
-    tmp_ding = 'tmp_ding'
-    tmp_di = 'tmp_di'
-    # 候选(candidate)
-    can_ding = 'can_ding'
-    can_di = 'can_di'
-
-
-class DuanState(Enum):
-    up = 'up'
-    down = 'down'
-    # Bardo，中阴阶段,不定，变化,易
-    yi = 'yi'
-
-
-def fenxing_power(left, middle, right, fenxing='tmp_ding'):
-    if fenxing == 'tmp_ding':
-        a = middle['high'] - middle['close']
-        b = middle['high'] - left['high']
-        c = middle['high'] - right['high']
-        return -(a + b + c) / middle['close']
-    if fenxing == 'tmp_di':
-        a = abs(middle['low'] - middle['close'])
-        b = abs(middle['low'] - left['low'])
-        c = abs(middle['low'] - right['low'])
-        return (a + b + c) / middle['close']
-
-
-def a_include_b(a: pd.Series, b: pd.Series) -> bool:
-    """
-    kdata a includes kdata b
-
-    :param a:
-    :param b:
-    :return:
-    """
-    return (a['high'] >= b['high']) and (a['low'] <= b['low'])
-
-
-def is_including(kdata1, kdata2):
-    return a_include_b(kdata1, kdata2) or a_include_b(kdata2, kdata1)
-
-
-def get_direction(kdata, pre_kdata, current=Direction.up) -> Direction:
-    if is_up(kdata, pre_kdata):
-        return Direction.up
-    if is_down(kdata, pre_kdata):
-        return Direction.down
-
-    return current
-
-
-def is_up(kdata, pre_kdata):
-    return kdata['high'] > pre_kdata['high']
-
-
-def is_down(kdata, pre_kdata):
-    return kdata['low'] < pre_kdata['low']
-
-
-def handle_first_fenxing(one_df, step=11):
-    if step >= len(one_df):
-        logger.info(f"coult not get fenxing by step {step}, len {len(one_df)}")
-        return None, None, None, None
-
-    logger.info(f"try to get first fenxing by step {step}")
-
-    df = one_df.iloc[:step]
-    ding_kdata = df[df['high'].max() == df['high']]
-    ding_index = int(ding_kdata.index[-1])
-
-    di_kdata = df[df['low'].min() == df['low']]
-    di_index = int(di_kdata.index[-1])
-
-    # 确定第一个分型
-    if abs(ding_index - di_index) >= 4:
-        if ding_index > di_index:
-            fenxing = 'bi_di'
-            fenxing_index = di_index
-            one_df.loc[di_index, 'bi_di'] = True
-            # 确定第一个分型后，开始遍历的位置
-            start_index = ding_index
-            # 目前的笔的方向，up代表寻找 can_ding;down代表寻找can_di
-            direction = Direction.up
-            interval = ding_index - di_index
-        else:
-            fenxing = 'bi_ding'
-            fenxing_index = ding_index
-            one_df.loc[ding_index, 'bi_ding'] = True
-            start_index = di_index
-            direction = Direction.down
-            interval = di_index - ding_index
-        return Fenxing(state=fenxing, index=fenxing_index,
-                       kdata={
-                           'low': float(one_df.loc[fenxing_index]['low']),
-                           'high': float(one_df.loc[fenxing_index]['high'])
-                       }), start_index, direction, interval
-    else:
-        logger.info("need add step")
-        return handle_first_fenxing(one_df, step=step + 1)
-
-
-def handle_duan(fenxing_list: List[Fenxing], pre_duan_state='yi'):
-    state = fenxing_list[0].state
-    # 1笔区间
-    bi1_start = fenxing_list[0].kdata
-    bi1_end = fenxing_list[1].kdata
-    # 3笔区间
-    bi3_start = fenxing_list[2].kdata
-    bi3_end = fenxing_list[3].kdata
-
-    if state == 'bi_ding':
-        # 向下段,下-上-下
-
-        # 第一笔区间
-        range1 = (bi1_end['low'], bi1_start['high'])
-        # 第三笔区间
-        range3 = (bi3_end['low'], bi3_start['high'])
-
-        # 1,3有重叠，认为第一个段出现
-        if intersect(range1, range3):
-            return 'down'
-
-    else:
-        # 向上段，上-下-上
-
-        # 第一笔区间
-        range1 = (bi1_start['low'], bi1_end['high'])
-        # 第三笔区间
-        range3 = (bi3_start['low'], bi3_end['high'])
-
-        # 1,3有重叠，认为第一个段出现
-        if intersect(range1, range3):
-            return 'up'
-
-    return pre_duan_state
-
-
-def handle_including(one_df, index, kdata, pre_index, pre_kdata, tmp_direction: Direction):
-    # 改kdata
-    if a_include_b(kdata, pre_kdata):
-        # 长的kdata变短
-        if tmp_direction == Direction.up:
-            one_df.loc[index, 'low'] = pre_kdata['low']
-        else:
-            one_df.loc[index, 'high'] = pre_kdata['high']
-    # 改pre_kdata
-    elif a_include_b(pre_kdata, kdata):
-        # 长的pre_kdata变短
-        if tmp_direction == Direction.down:
-            one_df.loc[pre_index, 'low'] = kdata['low']
-        else:
-            one_df.loc[pre_index, 'high'] = kdata['high']
-
-
-class FactorStateEncoder(json.JSONEncoder):
-    def default(self, object):
-        if isinstance(object, pd.Series):
-            return object.to_dict()
-        elif isinstance(object, pd.Timestamp):
-            return to_time_str(object, fmt=TIME_FORMAT_ISO8601)
-        elif isinstance(object, Enum):
-            return object.value
-        elif isinstance(object, Bean):
-            return object.dict()
-        else:
-            return super().default(object)
-
-
-def decode_rect(dct):
-    return Rect(x0=dct['x0'], y0=dct['y0'], x1=dct['x1'], y1=dct['y1'])
-
-
-def decode_fenxing(dct):
-    return Fenxing(state=dct['state'], kdata=dct['kdata'], index=dct['index'])
-
-
-def get_zen_factor_schema(entity_type: str,
-                          level: Union[IntervalLevel, str] = IntervalLevel.LEVEL_1DAY):
+def get_z_factor_schema(entity_type: str,
+                        level: Union[IntervalLevel, str] = IntervalLevel.LEVEL_1DAY):
     if type(level) == str:
         level = IntervalLevel(level)
 
     # z factor schema rule
     # 1)name:{SecurityType.value.capitalize()}{IntervalLevel.value.upper()}ZFactor
-    schema_str = '{}{}ZenFactor'.format(entity_type.capitalize(), level.value.capitalize())
+    schema_str = '{}{}ZFactor'.format(entity_type.capitalize(), level.value.capitalize())
 
     return get_schema_by_name(schema_str)
 
 
 @to_string
-class ZenState(Bean):
+class ZState(Bean):
     def __init__(self, state: dict = None) -> None:
         super().__init__()
 
@@ -274,52 +70,8 @@ class ZenState(Bean):
         self.pre_bi = state.get('pre_bi')
         self.pre_duan = state.get('pre_duan')
 
-        # 目前的merge_zhongshu
-        self.merge_zhongshu = state.get('merge_zhongshu')
-        self.merge_zhongshu_change = state.get('merge_zhongshu_change')
 
-
-def handle_zhongshu(points: list, acc_df, end_index, zhongshu_col='zhongshu', zhongshu_change_col='zhongshu_change'):
-    zhongshu = None
-    zhongshu_change = None
-
-    if len(points) == 4:
-        x1 = points[0][0]
-        x2 = points[3][0]
-
-        if points[0][1] < points[1][1]:
-            # 向下段
-            range = intersect((points[0][1], points[1][1]),
-                              (points[2][1], points[3][1]))
-            if range:
-                y1, y2 = range
-                # 记录中枢
-                zhongshu = Rect(x0=x1, x1=x2, y0=y1, y1=y2)
-                zhongshu_change = abs(y1 - y2) / y1
-                acc_df.loc[end_index, zhongshu_col] = zhongshu
-                acc_df.loc[end_index, zhongshu_change_col] = zhongshu_change
-                points = points[-1:]
-            else:
-                points = points[1:]
-        else:
-            # 向上段
-            range = intersect((points[1][1], points[0][1]),
-                              (points[3][1], points[2][1]))
-            if range:
-                y1, y2 = range
-                # 记录中枢
-                zhongshu = Rect(x0=x1, x1=x2, y0=y1, y1=y2)
-                zhongshu_change = abs(y1 - y2) / y1
-
-                acc_df.loc[end_index, zhongshu_col] = zhongshu
-                acc_df.loc[end_index, zhongshu_change_col] = zhongshu_change
-                points = points[-1:]
-            else:
-                points = points[1:]
-    return points, zhongshu, zhongshu_change
-
-
-class ZenAccumulator(Accumulator):
+class ZAccumulator(Accumulator):
     def __init__(self, acc_window: int = 1) -> None:
         """
         算法和概念
@@ -364,7 +116,7 @@ class ZenAccumulator(Accumulator):
 
                 acc_df = pd.concat([acc_df, df])
 
-                zen_state = ZenState(state)
+                zen_state = ZState(state)
 
                 acc_df = acc_df.reset_index(drop=True)
                 current_interval = acc_df.iloc[start_index - 1]['current_interval']
@@ -403,10 +155,6 @@ class ZenAccumulator(Accumulator):
             acc_df['current_zhongshu_y0'] = np.NAN
             acc_df['current_zhongshu_y1'] = np.NAN
 
-            acc_df['current_merge_zhongshu_change'] = np.NAN
-            acc_df['current_merge_zhongshu_y0'] = np.NAN
-            acc_df['current_merge_zhongshu_y1'] = np.NAN
-
             # 目前走势的临时方向 其跟direction的的关系 确定了下一个分型
             acc_df['tmp_direction'] = None
             acc_df['opposite_change'] = np.NAN
@@ -429,17 +177,16 @@ class ZenAccumulator(Accumulator):
             acc_df['duan_interval'] = np.NAN
 
             # 记录在确定中枢的最后一个段的终点x1，值为Rect(x0,y0,x1,y1)
-            acc_df['zhongshu'] = np.NAN
+            acc_df['zhongshu'] = None
             acc_df['zhongshu_change'] = np.NAN
 
-            acc_df['bi_zhongshu'] = np.NAN
+            acc_df['bi_zhongshu'] = None
             acc_df['bi_zhongshu_change'] = np.NAN
 
             acc_df = acc_df.reset_index(drop=True)
 
-            zen_state = ZenState(dict(fenxing_list=[], direction=None, can_fenxing=None, can_fenxing_index=None,
-                                      opposite_count=0, current_duan_state='yi', duans=[], pre_bi=None, pre_duan=None,
-                                      merge_zhongshu=None))
+            zen_state = ZState(dict(fenxing_list=[], direction=None, can_fenxing=None, can_fenxing_index=None,
+                                    opposite_count=0, current_duan_state='yi', duans=[], pre_bi=None, pre_duan=None))
 
             zen_state.fenxing_list: List[Fenxing] = []
 
@@ -462,8 +209,6 @@ class ZenAccumulator(Accumulator):
         pre_index = start_index - 1
 
         tmp_direction = zen_state.direction
-        current_merge_zhongshu = zen_state.merge_zhongshu
-        current_merge_zhongshu_change = zen_state.merge_zhongshu_change
 
         current_zhongshu = None
         current_zhongshu_change = None
@@ -495,18 +240,6 @@ class ZenAccumulator(Accumulator):
                 acc_df.loc[index, 'current_zhongshu_y0'] = acc_df.loc[index - 1, 'current_zhongshu_y0']
                 acc_df.loc[index, 'current_zhongshu_y1'] = acc_df.loc[index - 1, 'current_zhongshu_y1']
                 acc_df.loc[index, 'current_zhongshu_change'] = acc_df.loc[index - 1, 'current_zhongshu_change']
-
-            if current_merge_zhongshu:
-                # acc_df.loc[index, 'current_merge_zhongshu'] = current_merge_zhongshu
-                acc_df.loc[index, 'current_merge_zhongshu_y0'] = current_merge_zhongshu.y0
-                acc_df.loc[index, 'current_merge_zhongshu_y1'] = current_merge_zhongshu.y1
-                acc_df.loc[index, 'current_merge_zhongshu_change'] = current_merge_zhongshu_change
-            else:
-                # acc_df.loc[index, 'current_merge_zhongshu'] = acc_df.loc[index - 1, 'current_merge_zhongshu']
-                acc_df.loc[index, 'current_merge_zhongshu_y0'] = acc_df.loc[index - 1, 'current_merge_zhongshu_y0']
-                acc_df.loc[index, 'current_merge_zhongshu_y1'] = acc_df.loc[index - 1, 'current_merge_zhongshu_y1']
-                acc_df.loc[index, 'current_merge_zhongshu_change'] = acc_df.loc[
-                    index - 1, 'current_merge_zhongshu_change']
 
             # 处理包含关系
             handle_including(one_df=acc_df, index=index, kdata=kdata, pre_index=pre_index, pre_kdata=pre_kdata,
@@ -587,39 +320,20 @@ class ZenAccumulator(Accumulator):
                             acc_df.loc[zen_state.can_fenxing_index, 'bi_interval'] = interval
 
                         # 记录用于计算笔中枢的笔
-                        zen_state.bis.append((acc_df.loc[zen_state.can_fenxing_index, 'timestamp'], bi_value))
+                        zen_state.bis.append((acc_df.loc[zen_state.can_fenxing_index, 'timestamp'], bi_value,
+                                              zen_state.can_fenxing_index))
 
                         # 计算笔中枢，当下来说这个 中枢 是确定的，并且是不可变的
                         # 但标记的点为 过去，注意在回测时最近的一个中枢可能用到未来函数，前一个才是 已知的
                         # 所以记了一个 current_zhongshu_y0 current_zhongshu_y1 这个是可直接使用的
                         end_index = zen_state.can_fenxing_index
 
-                        zen_state.bis, current_zhongshu, current_zhongshu_change = handle_zhongshu(points=zen_state.bis,
-                                                                                                   acc_df=acc_df,
-                                                                                                   end_index=end_index,
-                                                                                                   zhongshu_col='bi_zhongshu',
-                                                                                                   zhongshu_change_col='bi_zhongshu_change')
-
-                        if not current_merge_zhongshu:
-                            current_merge_zhongshu = current_zhongshu
-                            current_merge_zhongshu_change = current_zhongshu_change
-                        else:
-                            if current_zhongshu:
-                                range_a = (current_merge_zhongshu.y0, current_merge_zhongshu.y1)
-                                range_b = (current_zhongshu.y0, current_zhongshu.y1)
-                                combine_range = combine(range_a, range_b)
-                                if combine_range:
-                                    y0 = combine_range[0]
-                                    y1 = combine_range[1]
-                                    current_merge_zhongshu = Rect(x0=current_merge_zhongshu.x0, x1=current_zhongshu.x1,
-                                                                  y0=y0, y1=y1)
-                                    current_merge_zhongshu_change = abs(y0 - y1) / y0
-                                else:
-                                    current_merge_zhongshu = current_zhongshu
-                                    current_merge_zhongshu_change = current_zhongshu_change
-
-                                acc_df.loc[end_index, 'merge_zhongshu'] = current_merge_zhongshu
-                                acc_df.loc[end_index, 'merge_zhongshu_change'] = current_merge_zhongshu_change
+                        zen_state.bis, current_zhongshu, current_zhongshu_change, current_zhongshu_interval = handle_zhongshu(
+                            points=zen_state.bis,
+                            acc_df=acc_df,
+                            end_index=end_index,
+                            zhongshu_col='bi_zhongshu',
+                            zhongshu_change_col='bi_zhongshu_change')
 
                         zen_state.pre_bi = (zen_state.can_fenxing_index, bi_value)
 
@@ -673,13 +387,14 @@ class ZenAccumulator(Accumulator):
                                     zen_state.pre_duan = (duan_index, duan_value)
 
                                     # 记录用于计算中枢的段
-                                    zen_state.duans.append((acc_df.loc[duan_index, 'timestamp'], duan_value))
+                                    zen_state.duans.append(
+                                        (acc_df.loc[duan_index, 'timestamp'], duan_value, duan_index))
 
                                     # 计算中枢
-                                    zen_state.duans, _, _ = handle_zhongshu(points=zen_state.duans, acc_df=acc_df,
-                                                                            end_index=duan_index,
-                                                                            zhongshu_col='zhongshu',
-                                                                            zhongshu_change_col='zhongshu_change')
+                                    zen_state.duans, _, _, _ = handle_zhongshu(points=zen_state.duans, acc_df=acc_df,
+                                                                               end_index=duan_index,
+                                                                               zhongshu_col='zhongshu',
+                                                                               zhongshu_change_col='zhongshu_change')
 
                                     # 只留最后一个
                                     zen_state.fenxing_list = zen_state.fenxing_list[-1:]
@@ -696,11 +411,8 @@ class ZenAccumulator(Accumulator):
         return acc_df, zen_state
 
 
-class ZenFactor(TechnicalFactor):
-    accumulator = ZenAccumulator()
-
-    def drawer_main_data(self) -> Optional[NormalData]:
-        return super().drawer_main_data()
+class ZFactor(TechnicalFactor):
+    accumulator = ZAccumulator()
 
     def __init__(self,
                  entity_schema: Type[TradableEntity] = Stock,
@@ -730,7 +442,7 @@ class ZenFactor(TechnicalFactor):
                  clear_state: bool = False,
                  only_load_factor: bool = False,
                  adjust_type: Union[AdjustType, str] = None) -> None:
-        self.factor_schema = get_zen_factor_schema(entity_type=entity_schema.__name__, level=level)
+        self.factor_schema = get_z_factor_schema(entity_type=entity_schema.__name__, level=level)
         super().__init__(entity_schema, provider, entity_provider, entity_ids, exchanges, codes, start_timestamp,
                          end_timestamp, columns, filters, order, limit, level, category_field, time_field,
                          computing_window, keep_all_timestamp, fill_method, effective_number, transformer, accumulator,
@@ -739,9 +451,7 @@ class ZenFactor(TechnicalFactor):
     def factor_col_map_object_hook(self) -> dict:
         return {
             'zhongshu': decode_rect,
-            'current_zhongshu': decode_rect,
-            'bi_zhongshu': decode_rect,
-            'merge_zhongshu': decode_rect
+            'bi_zhongshu': decode_rect
         }
 
     def factor_encoder(self):
@@ -749,27 +459,24 @@ class ZenFactor(TechnicalFactor):
 
     def drawer_factor_df_list(self) -> Optional[List[pd.DataFrame]]:
         bi_value = self.factor_df[['bi_value']].dropna()
-        duan_value = self.factor_df[['duan_value']].dropna()
-        return [bi_value, duan_value]
+        # duan_value = self.factor_df[['duan_value']].dropna()
+        return [bi_value]
 
     def drawer_rects(self) -> List[Rect]:
-        df1 = self.factor_df[['merge_zhongshu']].dropna()
-        return df1['merge_zhongshu'].tolist()
+        df1 = self.factor_df[['bi_zhongshu']].dropna()
+        return df1['bi_zhongshu'].tolist()
 
     def drawer_sub_df_list(self) -> Optional[List[pd.DataFrame]]:
-        # bi_slope = self.factor_df[['bi_slope']].dropna()
-        # duan_slope = self.factor_df[['duan_slope']].dropna()
-        # power = self.factor_df[['fenxing_power']].dropna()
-        # zhongshu_change = self.factor_df[['zhongshu_change']].dropna()
-        # return [bi_slope, duan_slope, power, zhongshu_change]
-        change1 = self.factor_df[['current_change']].dropna()
-        change2 = self.factor_df[['opposite_change']].dropna()
-        return [change1, change2]
+        df = self.factor_df[['current_slope']].dropna()
+        return [df]
 
 
+if __name__ == '__main__':
+    entity_ids = ['index_sh_000001']
+    Index1dKdata.record_data(entity_ids=entity_ids)
+
+    f = ZFactor(entity_schema=Index, entity_ids=entity_ids, need_persist=False, provider='em',
+                entity_provider='exchange')
+    f.draw(show=True)
 # the __all__ is generated
-__all__ = ['Direction', 'Fenxing', 'KState', 'DuanState', 'fenxing_power', 'a_include_b', 'is_including',
-           'get_direction', 'is_up', 'is_down', 'handle_first_fenxing', 'handle_duan', 'handle_including',
-           'FactorStateEncoder', 'decode_rect', 'decode_fenxing',
-           'get_zen_factor_schema', 'ZenState', 'handle_zhongshu', 'ZenAccumulator', 'ZenFactor',
-           ]
+__all__ = ['get_z_factor_schema', 'ZState', 'ZAccumulator', 'ZFactor']

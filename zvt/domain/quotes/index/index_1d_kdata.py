@@ -5,6 +5,10 @@ from sqlalchemy.orm import declarative_base
 from zvt.contract.register import register_schema
 from zvt.domain.quotes import IndexKdataCommon
 
+'''
+declarative_base()是sqlalchemy内部封装的一个方法，通过其构造一个基类
+，这个基类和它的子类，可以将Python类和数据库表关联映射起来。
+'''
 KdataBase = declarative_base()
 
 
@@ -12,7 +16,7 @@ class Index1dKdata(KdataBase, IndexKdataCommon):
     __tablename__ = 'index_1d_kdata'
 
 
-register_schema(providers=['em', 'sina'], db_name='index_1d_kdata', schema_base=KdataBase, entity_type='index')
+register_schema(providers=['em', 'sina', 'joinquant'], db_name='index_1d_kdata', schema_base=KdataBase, entity_type='index')
 
 # the __all__ is generated
 __all__ = ['Index1dKdata']

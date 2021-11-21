@@ -9,6 +9,9 @@ ValuationBase = declarative_base()
 
 
 class StockValuation(ValuationBase, Mixin):
+    """
+    股票估值相关的数据，比如PE、市净率等。
+    """
     __tablename__ = 'stock_valuation'
 
     code = Column(String(length=32))

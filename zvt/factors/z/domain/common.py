@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from sqlalchemy import Column, Float, String, Boolean, Integer
 
-from zvt.contract import Mixin
+from zvt.contract.schema import Mixin
 
 
-class ZenFactorCommon(Mixin):
+class ZFactorCommon(Mixin):
     level = Column(String(length=32))
     # 开盘价
     open = Column(Float)
@@ -49,10 +49,6 @@ class ZenFactorCommon(Mixin):
     current_zhongshu_y1 = Column(Float)
     current_zhongshu_change = Column(Float)
 
-    current_merge_zhongshu_y0 = Column(Float)
-    current_merge_zhongshu_y1 = Column(Float)
-    current_merge_zhongshu_change = Column(Float)
-
     # 目前走势的临时方向 其跟direction的的关系 确定了下一个分型
     tmp_direction = Column(String(length=16))
     opposite_change = Column(Float)
@@ -82,10 +78,6 @@ class ZenFactorCommon(Mixin):
     bi_zhongshu = Column(String(length=512))
     bi_zhongshu_change = Column(Float)
 
-    # 从前往后，合并相邻的有重叠的笔中枢
-    merge_zhongshu = Column(String(length=512))
-    merge_zhongshu_change = Column(Float)
-
 
 # the __all__ is generated
-__all__ = ['ZenFactorCommon']
+__all__ = ['ZFactorCommon']

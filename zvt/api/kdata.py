@@ -11,9 +11,26 @@ from zvt.utils.pd_utils import pd_is_not_null
 from zvt.utils.time_utils import to_time_str, TIME_FORMAT_DAY, TIME_FORMAT_ISO8601
 
 
+def get_latest_kdata_date(entity_type: str,
+                          level: Union[IntervalLevel, str] = IntervalLevel.LEVEL_1DAY,
+                          adjust_type: Union[AdjustType, str] = None):
+    data_schema: Mixin = get_kdata_schema(entity_type, level=level, adjust_type=adjust_type)
+
+    latest_data = data_schema.query_data(order=data_schema.timestamp.desc(), limit=1,
+                                         return_type='domain')
+    return latest_data[0].timestamp
+
+
 def get_kdata_schema(entity_type: str,
                      level: Union[IntervalLevel, str] = IntervalLevel.LEVEL_1DAY,
                      adjust_type: Union[AdjustType, str] = None) -> Mixin:
+    """
+
+    :param entity_type:
+    :param level:
+    :param adjust_type:
+    :return:
+    """
     if type(level) == str:
         level = IntervalLevel(level)
     if type(adjust_type) == str:
@@ -32,6 +49,25 @@ def get_kdata_schema(entity_type: str,
 def get_kdata(entity_id=None, entity_ids=None, level=IntervalLevel.LEVEL_1DAY.value, provider=None, columns=None,
               return_type='df', start_timestamp=None, end_timestamp=None, filters=None, session=None, order=None,
               limit=None, index='timestamp', adjust_type: AdjustType = None):
+    """
+    用法：
+    df = get_kdata(entity_id='stock_sz_000338', provider='joinquant',adjust_type=AdjustType.hfq)
+    :param entity_id:
+    :param entity_ids:
+    :param level:
+    :param provider:
+    :param columns:
+    :param return_type:
+    :param start_timestamp:
+    :param end_timestamp:
+    :param filters:
+    :param session:
+    :param order:
+    :param limit:
+    :param index:
+    :param adjust_type:
+    :return:
+    """
     assert not entity_id or not entity_ids
     if entity_ids:
         entity_id = entity_ids[0]
@@ -109,5 +145,11 @@ def to_high_level_kdata(kdata_df: pd.DataFrame, to_level: IntervalLevel):
     df['name'] = name
 
     return df
+
+
 # the __all__ is generated
 __all__ = ['get_kdata_schema', 'get_kdata', 'generate_kdata_id', 'to_high_level_kdata']
+
+if __name__ == "__main__":
+    df = get_kdata(entity_id='stock_sz_000338', provider='joinquant',adjust_type=AdjustType.hfq)
+    print(df)

@@ -10,6 +10,9 @@ from zvt.utils.time_utils import now_pd_timestamp
 
 
 class JqChinaEtfValuationRecorder(TimeSeriesDataRecorder):
+    """
+
+    """
     entity_provider = 'joinquant'
     entity_schema = Etf
 
@@ -30,6 +33,9 @@ class JqChinaEtfValuationRecorder(TimeSeriesDataRecorder):
             if pd_is_not_null(etf_stock_df):
                 all_pct = etf_stock_df['proportion'].sum()
 
+                '''
+                总权重异常，如果总权重大于120%或者小于80%，忽略该组合。
+                '''
                 if all_pct >= 1.2 or all_pct <= 0.8:
                     self.logger.error(f'ignore etf:{entity.id}  date:{date} proportion sum:{all_pct}')
                     break
@@ -51,6 +57,9 @@ class JqChinaEtfValuationRecorder(TimeSeriesDataRecorder):
 
                     pct = abs(stock_count - valuation_count) / stock_count
 
+                    '''
+                    组合中20%的股票缺少估值数据，则忽略这个组合。
+                    '''
                     if pct >= 0.2:
                         self.logger.error(f'ignore etf:{entity.id}  date:{date} pct:{pct}')
                         break
@@ -61,13 +70,19 @@ class JqChinaEtfValuationRecorder(TimeSeriesDataRecorder):
                                     'code': entity.code,
                                     'name': entity.name})
                     for col in ['pe', 'pe_ttm', 'pb', 'ps', 'pcf']:
-                        # PE=P/E
-                        # 这里的算法为：将其价格都设为PE,那么Earning为1(亏钱为-1)，结果为 总价格(PE)/总Earning
+                        '''
+                        PE=P/E，市盈率（Price Earnings Ratio），股票价格 除以 每股收益 (每股收益,EPS)的比率。
+                        这里的算法为：将其价格都设为PE,那么Earning为1(亏钱为-1)
+                        ，结果为 总价格(PE)/总Earning
 
+                        '''
                         value = 0
                         price = 0
 
                         # 权重估值
+                        '''
+                        正收益的股票
+                        '''
                         positive_df = stock_valuation_df[[col]][stock_valuation_df[col] > 0]
                         positive_df['count'] = 1
                         positive_df = positive_df.multiply(etf_stock_df["proportion"], axis="index")

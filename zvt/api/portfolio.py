@@ -19,9 +19,19 @@ def portfolio_relate_stock(df, portfolio):
     return df
 
 
-# 季报只有前十大持仓，半年报和年报才有全量的持仓信息，故根据离timestamp最近的报表(年报 or 半年报)来确定持仓
 def get_portfolio_stocks(portfolio_entity=Fund, code=None, codes=None, ids=None, timestamp=now_pd_timestamp(),
                          provider=None):
+    """
+    ETF和基金（Fund）等投资组合的持仓股票。
+    季报只有前十大持仓，半年报和年报才有全量的持仓信息，故根据离timestamp最近的报表(年报 or 半年报)来确定持仓
+    :param portfolio_entity:
+    :param code:
+    :param codes:
+    :param ids:
+    :param timestamp:
+    :param provider:
+    :return:
+    """
     portfolio_stock = f'{portfolio_entity.__name__}Stock'
     data_schema: PortfolioStockHistory = get_schema_by_name(portfolio_stock)
     latests: List[PortfolioStockHistory] = data_schema.query_data(provider=provider, code=code, end_timestamp=timestamp,
@@ -56,11 +66,31 @@ def get_portfolio_stocks(portfolio_entity=Fund, code=None, codes=None, ids=None,
 
 
 def get_etf_stocks(code=None, codes=None, ids=None, timestamp=now_pd_timestamp(), provider=None):
+    """
+    ETF投资组合的持仓股票。
+    季报只有前十大持仓，半年报和年报才有全量的持仓信息，故根据离timestamp最近的报表(年报 or 半年报)来确定持仓
+    :param code:
+    :param codes:
+    :param ids:
+    :param timestamp:
+    :param provider:
+    :return:
+    """
     return get_portfolio_stocks(portfolio_entity=Etf, code=code, codes=codes, ids=ids, timestamp=timestamp,
                                 provider=provider)
 
 
 def get_fund_stocks(code=None, codes=None, ids=None, timestamp=now_pd_timestamp(), provider=None):
+    """
+    基金（Fund）等投资组合的持仓股票。
+    季报只有前十大持仓，半年报和年报才有全量的持仓信息，故根据离timestamp最近的报表(年报 or 半年报)来确定持仓
+    :param code:
+    :param codes:
+    :param ids:
+    :param timestamp:
+    :param provider:
+    :return:
+    """
     return get_portfolio_stocks(portfolio_entity=Fund, code=code, codes=codes, ids=ids, timestamp=timestamp,
                                 provider=provider)
 # the __all__ is generated

@@ -9,6 +9,9 @@ KdataBase = declarative_base()
 
 
 class Block1dKdata(KdataBase, BlockKdataCommon):
+    """
+    板块日K线数据，在eastmoney_block_1d_kdata.db以及em_block_1d_kdata.db中。
+    """
     __tablename__ = 'block_1d_kdata'
 
 

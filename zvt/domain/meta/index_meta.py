@@ -6,12 +6,18 @@ from sqlalchemy.orm import declarative_base
 from zvt.contract import Portfolio, PortfolioStockHistory
 from zvt.contract.register import register_schema, register_entity
 
+'''
+declarative_base()是sqlalchemy内部封装的一个方法，通过其构造一个基类
+，这个基类和它的子类，可以将Python类和数据库表关联映射起来。
+'''
 IndexMetaBase = declarative_base()
 
 
-# 指数
 @register_entity(entity_type='index')
 class Index(IndexMetaBase, Portfolio):
+    """
+    指数，在exchange_index_meta.db中。
+    """
     __tablename__ = 'index'
 
     # 发布商
@@ -24,6 +30,9 @@ class Index(IndexMetaBase, Portfolio):
 
 
 class IndexStock(IndexMetaBase, PortfolioStockHistory):
+    """
+    指数成分股，在exchange_index_meta.db、sina_stock_meta.db以及eastmoney_stock_meta.db中。
+    """
     __tablename__ = 'index_stock'
 
 

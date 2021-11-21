@@ -9,6 +9,9 @@ TradingBase = declarative_base()
 
 
 class ManagerTrading(TradingBase, Mixin):
+    """
+    高管持股变动。
+    """
     __tablename__ = 'manager_trading'
 
     provider = Column(String(length=32))
@@ -89,6 +92,9 @@ class MarginTrading(TradingBase, Mixin):
 
 
 class DragonAndTiger(TradingBase, Mixin):
+    """
+    龙虎榜
+    """
     __tablename__ = 'dragon_and_tiger'
 
     provider = Column(String(length=32))

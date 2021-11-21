@@ -8,8 +8,10 @@ from zvt.contract.schema import ActorEntity
 ActorMetaBase = declarative_base()
 
 
-# 参与者
 class ActorMeta(ActorMetaBase, ActorEntity):
+    """
+    市场参与者，比如股票的机构投资者，股票的前十大流通股东等。
+    """
     __tablename__ = 'actor_meta'
 
 

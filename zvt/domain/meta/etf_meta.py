@@ -10,9 +10,11 @@ from zvt.utils.time_utils import now_pd_timestamp
 EtfMetaBase = declarative_base()
 
 
-# etf
 @register_entity(entity_type='etf')
 class Etf(EtfMetaBase, Portfolio):
+    """
+    交易所交易型基金etf，在X_etf_meta.db中
+    """
     __tablename__ = 'etf'
     category = Column(String(length=64))
 
@@ -23,6 +25,9 @@ class Etf(EtfMetaBase, Portfolio):
 
 
 class EtfStock(EtfMetaBase, PortfolioStockHistory):
+    """
+    etf成分股，在X_etf_meta.db中
+    """
     __tablename__ = 'etf_stock'
 
 

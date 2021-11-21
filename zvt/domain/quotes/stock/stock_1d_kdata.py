@@ -9,6 +9,9 @@ KdataBase = declarative_base()
 
 
 class Stock1dKdata(KdataBase, StockKdataCommon):
+    """
+    股票日K线前复权数据。
+    """
     __tablename__ = 'stock_1d_kdata'
 
 

@@ -9,9 +9,11 @@ from zvt.utils import now_pd_timestamp
 FundMetaBase = declarative_base()
 
 
-# 个股
 @register_entity(entity_type='fund')
 class Fund(FundMetaBase, Portfolio):
+    """
+    基金基本信息，在X_fund_meta.db中。
+    """
     __tablename__ = 'fund'
     # 基金管理人
     advisor = Column(String(length=100))
@@ -50,6 +52,9 @@ class Fund(FundMetaBase, Portfolio):
 
 
 class FundStock(FundMetaBase, PortfolioStockHistory):
+    """
+    基金持股，在X_fund_meta.db中。
+    """
     __tablename__ = 'fund_stock'
 
 

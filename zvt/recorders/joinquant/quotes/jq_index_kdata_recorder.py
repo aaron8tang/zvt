@@ -16,6 +16,9 @@ from zvt.utils.time_utils import to_time_str, TIME_FORMAT_DAY, TIME_FORMAT_ISO86
 
 
 class JqChinaIndexKdataRecorder(FixedCycleDataRecorder):
+    """
+
+    """
     entity_provider = 'joinquant'
     entity_schema = Index
 

@@ -4,7 +4,8 @@ from zvt.api.kdata import get_kdata_schema
 from zvt.contract import IntervalLevel, AdjustType
 from zvt.contract.api import df_to_db
 from zvt.contract.recorder import FixedCycleDataRecorder
-from zvt.domain import Stock, Index, Block, StockKdataCommon, IndexKdataCommon, StockhkKdataCommon, StockusKdataCommon
+from zvt.domain import Stock, Index, Block, StockKdataCommon, IndexKdataCommon, StockhkKdataCommon, StockusKdataCommon, \
+    BlockKdataCommon
 from zvt.domain.meta.stockhk_meta import Stockhk
 from zvt.domain.meta.stockus_meta import Stockus
 from zvt.recorders.em.em_api import get_kdata
@@ -52,6 +53,24 @@ class BaseEMStockKdataRecorder(FixedCycleDataRecorder):
         else:
             self.logger.info(f'no kdata for {entity.id}')
 
+    def on_finish_entity(self, entity):
+        # fill timestamp
+        if not entity.timestamp or not entity.list_date:
+            # get the first
+            kdatas = self.data_schema.query_data(provider=self.provider, entity_id=entity.id,
+                                                 order=self.data_schema.timestamp.asc(), limit=1, return_type='domain')
+            if kdatas:
+                timestamp = kdatas[0].timestamp
+
+                self.logger.info(f'fill {entity.name} list_date as {timestamp}')
+
+                if not entity.timestamp:
+                    entity.timestamp = timestamp
+                if not entity.list_date:
+                    entity.list_date = timestamp
+                self.entity_session.add(entity)
+                self.entity_session.commit()
+
 
 class EMStockKdataRecorder(BaseEMStockKdataRecorder):
     entity_schema = Stock
@@ -81,11 +100,12 @@ class EMBlockKdataRecorder(BaseEMStockKdataRecorder):
     entity_provider = 'eastmoney'
     entity_schema = Block
 
-    data_schema = IndexKdataCommon
+    data_schema = BlockKdataCommon
 
 
 if __name__ == '__main__':
-    recorder = EMIndexKdataRecorder(level=IntervalLevel.LEVEL_1DAY, codes=['000300'])
+    recorder = EMBlockKdataRecorder(level=IntervalLevel.LEVEL_1DAY, codes=['000300'])
     recorder.run()
 # the __all__ is generated
-__all__ = ['BaseEMStockKdataRecorder', 'EMStockKdataRecorder', 'EMStockusKdataRecorder', 'EMStockhkKdataRecorder', 'EMIndexKdataRecorder', 'EMBlockKdataRecorder']
+__all__ = ['BaseEMStockKdataRecorder', 'EMStockKdataRecorder', 'EMStockusKdataRecorder', 'EMStockhkKdataRecorder',
+           'EMIndexKdataRecorder', 'EMBlockKdataRecorder']

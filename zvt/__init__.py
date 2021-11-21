@@ -12,7 +12,11 @@ import pkg_resources
 from pkg_resources import get_distribution, DistributionNotFound
 
 from zvt.consts import DATA_SAMPLE_ZIP_PATH, ZVT_TEST_HOME, ZVT_HOME, ZVT_TEST_DATA_PATH, ZVT_TEST_ZIP_DATA_PATH
-
+"""
+执行
+from zvt import *
+时，会执行本文件中的代码，初始化zvt_env，config.json，
+"""
 try:
     dist_name = __name__
     __version__ = get_distribution(dist_name).version
@@ -101,6 +105,7 @@ def init_env(zvt_home: str, **kwargs) -> dict:
 
     init_log()
 
+    # pretty-print
     pprint.pprint(zvt_env)
 
     # init config
@@ -178,6 +183,7 @@ if os.getenv('TESTING_ZVT'):
         from zvt.contract import *
         from zvt.utils.zip_utils import unzip
 
+        #将data.zip拷贝到ZVT_TEST_HOME目录下，并解压缩
         copyfile(DATA_SAMPLE_ZIP_PATH, ZVT_TEST_ZIP_DATA_PATH)
         unzip(ZVT_TEST_ZIP_DATA_PATH, ZVT_TEST_DATA_PATH)
 
@@ -189,4 +195,5 @@ import zvt.contract as zvt_contract
 import zvt.recorders as zvt_recorders
 import zvt.factors as zvt_factors
 
+# __all__ 关联一个模块/方法列表，当执行 from zvt import * 时，就会导入列表中的模块/方法。
 __all__ = ['zvt_env', 'zvt_config', 'init_log', 'init_env', 'init_config', '__version__']

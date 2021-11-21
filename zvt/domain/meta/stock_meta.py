@@ -8,15 +8,18 @@ from zvt.contract.register import register_schema, register_entity
 
 StockMetaBase = declarative_base()
 
-
-# 个股
 @register_entity(entity_type='stock')
 class Stock(StockMetaBase, TradableEntity):
+    """
+    个股，在sina_stock_meta.db、以及中。
+    """
     __tablename__ = 'stock'
 
 
-# 个股详情
 class StockDetail(StockMetaBase, TradableEntity):
+    """
+    个股详情，在sina_stock_meta.db、以及中。
+    """
     __tablename__ = 'stock_detail'
 
     # 所属行业

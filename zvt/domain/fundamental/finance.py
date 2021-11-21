@@ -9,6 +9,9 @@ FinanceBase = declarative_base()
 
 
 class BalanceSheet(FinanceBase, Mixin):
+    """
+    财报
+    """
 
     @classmethod
     def important_cols(cls):

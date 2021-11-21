@@ -108,6 +108,7 @@ def get_cn_index(index_type='cni', category=IndexCategory.style):
         }
         logger.info(index_item)
         the_list.append(index_item)
+        # 等待3秒
         time.sleep(3)
     if the_list:
         return pd.DataFrame.from_records(the_list)

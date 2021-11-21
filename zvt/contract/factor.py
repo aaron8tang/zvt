@@ -9,13 +9,13 @@ import pandas as pd
 from sqlalchemy import Column, String, Text
 from sqlalchemy.orm import declarative_base
 
-from zvt.contract import IntervalLevel, TradableEntity
-from zvt.contract import Mixin
+from zvt.contract import IntervalLevel
 from zvt.contract.api import get_data, df_to_db, get_db_session, del_data
 from zvt.contract.reader import DataReader, DataListener
 from zvt.contract.register import register_schema
+from zvt.contract.schema import Mixin, TradableEntity
 from zvt.contract.zvt_context import factor_cls_registry
-from zvt.utils.pd_utils import pd_is_not_null
+from zvt.utils.pd_utils import pd_is_not_null, drop_continue_duplicate, is_filter_result_df, is_score_result_df
 
 
 class Indicator(object):
@@ -55,7 +55,7 @@ class Transformer(Indicator):
         else:
             return g.apply(lambda x: self.transform_one(x.index[0][0], x.reset_index(level=0, drop=True)))
 
-    def transform_one(self, entity_id, df: pd.DataFrame) -> pd.DataFrame:
+    def transform_one(self, entity_id: str, df: pd.DataFrame) -> pd.DataFrame:
         """
         df format:
 
@@ -66,6 +66,7 @@ class Transformer(Indicator):
 
         the return result would change the columns and  keep the format
 
+        :param entity_id:
         :param df:
         :return:
         """
@@ -170,7 +171,7 @@ class FactorType(enum.Enum):
     score = 'score'
 
 
-def register_class(target_class):
+def _register_class(target_class):
     if target_class.__name__ not in ('Factor', 'FilterFactor', 'ScoreFactor', 'StateFactor'):
         factor_cls_registry[target_class.__name__] = target_class
 
@@ -178,7 +179,7 @@ def register_class(target_class):
 class FactorMeta(type):
     def __new__(meta, name, bases, class_dict):
         cls = type.__new__(meta, name, bases, class_dict)
-        register_class(cls)
+        _register_class(cls)
         return cls
 
 
@@ -358,7 +359,7 @@ class Factor(DataReader, DataListener):
             for col in col_map_object_hook:
                 if col in self.factor_df.columns:
                     self.factor_df[col] = self.factor_df[col].apply(
-                        lambda x: json.loads(x, object_hook=col_map_object_hook.get(col)))
+                        lambda x: json.loads(x, object_hook=col_map_object_hook.get(col)) if x else None)
 
     def factor_col_map_object_hook(self) -> dict:
         """
@@ -405,7 +406,7 @@ class Factor(DataReader, DataListener):
     def compute_factor(self):
         if self.only_load_factor:
             return
-            # 无状态的转换运算
+        # 无状态的转换运算
         if pd_is_not_null(self.data_df) and self.transformer:
             self.pipe_df = self.transformer.transform(self.data_df)
         else:
@@ -418,7 +419,15 @@ class Factor(DataReader, DataListener):
             self.factor_df = self.pipe_df
 
     def compute_result(self):
-        pass
+        if pd_is_not_null(self.factor_df):
+            cols = []
+            if is_filter_result_df(self.factor_df):
+                cols.append('filter_result')
+            if is_score_result_df(self.factor_df):
+                cols.append('score_result')
+
+            if cols:
+                self.result_df = self.factor_df[cols]
 
     def after_compute(self):
         if self.only_load_factor:
@@ -453,7 +462,16 @@ class Factor(DataReader, DataListener):
 
     def drawer_factor_df_list(self) -> Optional[List[pd.DataFrame]]:
         if (self.transformer is not None or self.accumulator is not None) and pd_is_not_null(self.factor_df):
-            return [self.factor_df]
+            indicators = None
+            if self.transformer is not None:
+                indicators = self.transformer.indicators
+            elif self.accumulator is not None:
+                indicators = self.accumulator.indicators
+
+            if indicators:
+                return [self.factor_df[indicators]]
+            else:
+                return [self.factor_df]
         return None
 
     def drawer_sub_df_list(self) -> Optional[List[pd.DataFrame]]:
@@ -463,14 +481,26 @@ class Factor(DataReader, DataListener):
 
     def drawer_annotation_df(self) -> Optional[pd.DataFrame]:
         def order_type_flag(order_type):
+            if order_type is None:
+                return None
             if order_type:
                 return 'B'
+            if not order_type:
+                return 'S'
 
-        if pd_is_not_null(self.result_df):
-            annotation_df = self.result_df.copy()
-            annotation_df = annotation_df[annotation_df['score']]
+        def order_type_color(order_type):
+            if order_type:
+                return "#ec0000"
+            else:
+                return "#00da3c"
+
+        if is_filter_result_df(self.result_df):
+            annotation_df = self.result_df[['filter_result']].copy()
+            annotation_df = annotation_df[~annotation_df['filter_result'].isna()]
+            annotation_df = drop_continue_duplicate(annotation_df, 'filter_result')
             annotation_df['value'] = self.factor_df.loc[annotation_df.index]['close']
-            annotation_df['flag'] = annotation_df['score'].apply(lambda x: order_type_flag(x))
+            annotation_df['flag'] = annotation_df['filter_result'].apply(lambda x: order_type_flag(x))
+            annotation_df['color'] = annotation_df['filter_result'].apply(lambda x: order_type_color(x))
             return annotation_df
 
     def fill_gap(self):
@@ -545,12 +575,7 @@ class Factor(DataReader, DataListener):
             df_to_db(df=df, data_schema=self.factor_schema, provider='zvt', force_update=False)
 
 
-class FilterFactor(Factor):
-    factor_type = FactorType.filter
-
-
 class ScoreFactor(Factor):
-    factor_type = FactorType.score
     scorer: Scorer = None
 
     def compute_result(self):
@@ -560,5 +585,4 @@ class ScoreFactor(Factor):
 
 
 # the __all__ is generated
-__all__ = ['Indicator', 'Transformer', 'Accumulator', 'Scorer', 'FactorType', 'register_class', 'FactorMeta',
-           'FactorState', 'Factor', 'FilterFactor', 'ScoreFactor']
+__all__ = ['Indicator', 'Transformer', 'Accumulator', 'Scorer', 'FactorType', 'FactorMeta', 'FactorBase', 'FactorState', 'Factor', 'ScoreFactor']
